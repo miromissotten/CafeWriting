@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title><%= pageTitle %></title>
+    <%- include('partials/head') %>
+</head>
+<body>
+    <div class="container" style="max-width: 560px;">
+        <div class="print-page">
+            <h1><%= text.title %></h1>
+            <div class="poem-body">
+                <% text.content.split('\n').forEach((line) => { %>
+                    <p><%= line %></p>
+                <% }) %>
+            </div>
+            <div class="meta-row" style="margin-top: 28px;">
+                <span class="pill"><%= text.category %></span>
+                <span class="tiny"><%= text.author %></span>
+            </div>
+        </div>
+
+        <div class="no-print" style="text-align: center; margin-top: 24px;">
+            <button class="primary-button" type="button" onclick="window.print()">Print</button>
+        </div>
+    </div>
+</body>
+</html>

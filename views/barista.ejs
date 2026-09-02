@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title><%= pageTitle %></title>
+    <%- include('partials/head') %>
+</head>
+<body class="page-shell barista-shell">
+    <div class="container barista-display">
+        <div class="barista-card">
+            <div id="display-area" class="stack">
+                <p class="lede">Ready when you are.</p>
+            </div>
+
+            <div class="barista-actions">
+                <button class="primary-button" id="generate-button" type="button">Generate today's text</button>
+                <button class="secondary-button" id="next-button" type="button">Next text</button>
+                <a class="secondary-button" id="print-link" href="#" target="_blank" rel="noopener" aria-label="Print selected text">Print</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const displayArea = document.getElementById('display-area');
+        const printLink = document.getElementById('print-link');
+        let currentText = null;
+
+        function renderText(text) {
+            currentText = text;
+            printLink.href = `/barista/print/${text.id}`;
+            displayArea.innerHTML = `
+                <h2>${text.title}</h2>
+                <div class="barista-text">${text.content.replace(/\n/g, '<br>')}</div>
+                <div class="meta-row" style="justify-content: center; margin-top: 24px;">
+                    <span class="pill">${text.category}</span>
+                    <span class="tiny">${text.author}</span>
+                </div>
+            `;
+        }
+
+        async function loadNextText() {
+            const response = await fetch('/api/barista/next-text');
+            if (!response.ok) {
+                displayArea.innerHTML = '<p class="lede">No approved texts are available yet.</p>';
+                return;
+            }
+
+            const text = await response.json();
+            renderText(text);
+        }
+
+        document.getElementById('generate-button').addEventListener('click', loadNextText);
+        document.getElementById('next-button').addEventListener('click', loadNextText);
+        window.addEventListener('DOMContentLoaded', loadNextText);
+    </script>
+</body>
+</html>

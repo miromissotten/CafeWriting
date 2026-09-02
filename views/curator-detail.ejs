@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title><%= pageTitle %></title>
+    <%- include('partials/head') %>
+</head>
+<body class="page-shell">
+    <div class="container container--wide">
+        <header class="topbar">
+            <div class="topbar-left">
+                <p class="eyebrow">Review</p>
+                <h1><%= submission.title %></h1>
+            </div>
+            <div class="topbar-right">
+                <a class="secondary-button" href="/curator/submissions">Back to queue</a>
+            </div>
+        </header>
+
+        <main class="detail-layout">
+            <section class="card">
+                <div class="poem-body">
+                    <% submission.content.split('\n').forEach((line) => { %>
+                        <p><%= line %></p>
+                    <% }) %>
+                </div>
+                <div class="meta-row" style="margin-top: 24px;">
+                    <span class="pill"><%= submission.category %></span>
+                    <span class="tiny"><%= submission.author %></span>
+                </div>
+                <% if (submission.source) { %>
+                    <p class="source-line">Source: <%= submission.source %></p>
+                <% } %>
+                <% if (submission.notes) { %>
+                    <p class="source-line">Notes: <%= submission.notes %></p>
+                <% } %>
+            </section>
+
+            <aside class="card stack">
+                <div>
+                    <p class="eyebrow">Status</p>
+                    <span class="status-badge status-<%= submission.status %>" style="margin-top: 6px;"><%= submission.status %></span>
+                </div>
+
+                <div>
+                    <p class="eyebrow">Metadata</p>
+                    <p style="margin-top: 4px; font-size: 0.88rem;"><strong>Created:</strong> <%= new Date(submission.created_at).toLocaleString() %></p>
+                    <% if (submission.rejection_reason) { %>
+                        <p style="margin-top: 4px; font-size: 0.88rem;"><strong>Rejection reason:</strong> <%= submission.rejection_reason %></p>
+                    <% } %>
+                </div>
+
+                <form id="edit-form" class="stack form-stack">
+                    <div class="field-group">
+                        <label for="title">Title</label>
+                        <input id="title" name="title" value="<%= submission.title %>" required />
+                    </div>
+                    <div class="field-group">
+                        <label for="author">Author</label>
+                        <input id="author" name="author" value="<%= submission.author %>" required />
+                    </div>
+                    <div class="field-group">
+                        <label for="category">Category</label>
+                        <select id="category" name="category" required>
+                            <option value="Poem" <%= submission.category === 'Poem' ? 'selected' : '' %>>Poem</option>
+                            <option value="Short story" <%= submission.category === 'Short story' ? 'selected' : '' %>>Short story</option>
+                            <option value="Quote" <%= submission.category === 'Quote' ? 'selected' : '' %>>Quote</option>
+                            <option value="Other" <%= submission.category === 'Other' ? 'selected' : '' %>>Other</option>
+                        </select>
+                    </div>
+                    <div class="field-group">
+                        <label for="content">Content</label>
+                        <textarea id="content" name="content" rows="8" required><%= submission.content %></textarea>
+                    </div>
+                    <div class="field-group">
+                        <label for="source">Source</label>
+                        <input id="source" name="source" value="<%= submission.source || '' %>" />
+                    </div>
+                    <div class="field-group">
+                        <label for="notes">Notes</label>
+                        <textarea id="notes" name="notes" rows="3"><%= submission.notes || '' %></textarea>
+                    </div>
+                </form>
+
+                <div class="detail-actions no-print">
+                    <button class="primary-button" id="approve-button" type="button">Approve</button>
+                    <button class="secondary-button" id="reject-button" type="button">Reject</button>
+                    <button class="secondary-button" id="save-button" type="button">Save edits</button>
+                    <button class="secondary-button" id="delete-button" type="button" style="color: var(--danger); border-color: rgba(139, 74, 63, 0.3);">Delete</button>
+                </div>
+            </aside>
+        </main>
+    </div>
+
+    <script>
+        const id = <%= submission.id %>;
+        const editForm = document.getElementById('edit-form');
+
+        async function saveSubmission() {
+            const payload = Object.fromEntries(new FormData(editForm).entries());
+            const res = await fetch(`/api/submissions/${id}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || 'Update failed.');
+                return;
+            }
+
+            alert('Submission updated.');
+            window.location.reload();
+        }
+
+        document.getElementById('save-button').addEventListener('click', saveSubmission);
+
+        document.getElementById('approve-button').addEventListener('click', async () => {
+            const res = await fetch(`/api/submissions/${id}/approve`, { method: 'POST' });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || 'Approval failed.');
+                return;
+            }
+            alert('Submission approved.');
+            window.location.href = '/curator/submissions';
+        });
+
+        document.getElementById('reject-button').addEventListener('click', async () => {
+            const reason = prompt('Optional rejection reason:');
+            const res = await fetch(`/api/submissions/${id}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: reason || '' })
+            });
+
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || 'Rejection failed.');
+                return;
+            }
+
+            alert('Submission rejected.');
+            window.location.href = '/curator/submissions';
+        });
+
+        document.getElementById('delete-button').addEventListener('click', async () => {
+            const confirmed = confirm('Delete this submission permanently?');
+            if (!confirmed) return;
+
+            const res = await fetch(`/api/submissions/${id}`, { method: 'DELETE' });
+            if (!res.ok) {
+                const data = await res.json();
+                alert(data.error || 'Deletion failed.');
+                return;
+            }
+
+            alert('Submission deleted.');
+            window.location.href = '/curator/submissions';
+        });
+    </script>
+</body>
+</html>

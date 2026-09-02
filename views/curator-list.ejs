@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title><%= pageTitle %></title>
+    <%- include('partials/head') %>
+</head>
+<body class="page-shell">
+    <div class="container container--wide">
+        <header class="topbar">
+            <div class="topbar-left">
+                <p class="eyebrow">Submissions</p>
+                <h1>Moderation queue</h1>
+            </div>
+            <div class="topbar-right">
+                <a class="secondary-button" href="/curator">Back to dashboard</a>
+            </div>
+        </header>
+
+        <section class="card">
+            <table class="submission-table">
+                <thead>
+                    <tr>
+                        <th>Title</th>
+                        <th>Author</th>
+                        <th>Category</th>
+                        <th>Status</th>
+                        <th>Submitted</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% submissions.forEach((submission) => { %>
+                        <tr>
+                            <td><%= submission.title %></td>
+                            <td><%= submission.author %></td>
+                            <td><%= submission.category %></td>
+                            <td><span class="status-badge status-<%= submission.status %>"><%= submission.status %></span></td>
+                            <td><%= new Date(submission.created_at).toLocaleDateString() %></td>
+                            <td><a href="/curator/submissions/<%= submission.id %>">Open</a></td>
+                        </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </section>
+    </div>
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Customer QR</title>
+    <%- include('partials/head') %>
+</head>
+<body class="page-shell">
+    <div class="container" style="max-width: 480px;">
+        <header class="topbar">
+            <div class="topbar-left">
+                <p class="eyebrow">On the table</p>
+                <h1>Scan to read</h1>
+            </div>
+            <div class="topbar-right">
+                <a class="admin-link" href="/">Home</a>
+            </div>
+        </header>
+
+        <main class="card" style="text-align: center;">
+            <div class="qr-image-wrap">
+                <img src="<%= qrDataUrl %>" alt="Customer QR code" />
+            </div>
+            <p class="tiny"><%= targetUrl %></p>
+            <p class="lede" style="font-size: 0.9rem; margin-top: 16px;">Place this on a table or by the counter.</p>
+        </main>
+    </div>
+</body>
+</html>
