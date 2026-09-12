@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cafe Writing - Client Mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<style>
+.mockup-bar{position:fixed;bottom:0;left:0;right:0;background:#faf6f1;border-top:1px solid #ede4d6}
+.mockup-inner{max-width:880px;margin:0 auto;padding:12px 16px 18px}
+.mockup-menu{display:flex;gap:4px;padding:4px;border:1px solid #ede4d6;border-radius:6px;background:#f2ece4;overflow-x:auto}
+.mockup-menu button{border:1px solid transparent;background:transparent;font-size:.85rem;padding:.5rem .8rem;border-radius:4px;cursor:pointer;white-space:nowrap}
+.mockup-menu button.active{background:#faf6f1;border-color:#ede4d6}
+.mockup-note{max-width:720px;margin:0 auto 130px;padding:12px 16px;background:#f2ece4;border:1px dashed #8a7f70;border-radius:8px;font-size:.88rem}
+.demo-nav{display:flex;gap:12px;flex-wrap:wrap;margin-top:18px}
+</style>
+</head>
+<body class="page-shell">
+<div class="container container--wide">
+<header class="topbar">
+<div class="topbar-left"><p class="eyebrow">Static client preview</p><h1>Cafe Writing mockup</h1></div>
+<div class="topbar-right"><span class="admin-link">no actions saved</span></div>
+</header>
+<main id="mockup-main" class="stack">
+<section data-view="home"><div class="card"><p class="eyebrow">A quiet place</p><h2>Cafe Writing</h2><p class="lede">A small corner for reading and leaving words behind.</p><div class="actions"><button class="primary-button" type="button" data-goto="customer">Customer</button><button class="secondary-button" type="button" data-goto="curator">Curator</button><button class="secondary-button" type="button" data-goto="barista">Barista</button><button class="secondary-button" type="button" data-goto="qr">QR</button></div></div></section>
+<section data-view="customer" hidden><div class="card"><p class="eyebrow">Reading room</p><h2>Evening bread</h2><div class="meta-row"><span class="pill">Poem</span><span class="tiny">M. Hart</span></div><p class="poem-body">Lanterns on the river keep their own small weather.</p><div class="demo-nav"><button class="primary-button" type="button" data-next-card>Like - next card</button><button class="secondary-button" type="button" data-next-card>Pass - next card</button></div><p class="tiny">Preview only, votes are not saved.</p></div></section>
+<section data-view="submit" hidden><div class="card"><p class="eyebrow">Leave words behind</p><h2>Submit a text</h2><p class="lede">Preview of the submission form. Nothing is sent.</p><div class="actions"><button class="primary-button" type="button">Submit - disabled in preview</button></div></div></section>
+<section data-view="curator" hidden><div class="card"><h2>Needs attention</h2><table class="submission-table"><thead><tr><th>Title</th><th>Author</th><th>Status</th><th></th></tr></thead><tbody><tr><td>Night ferry</td><td>Mila Hart</td><td>pending</td><td><button class="admin-link" type="button" data-goto="moderate">Open</button></td></tr><tr><td>Stone soup</td><td>J. Marsh</td><td>pending</td><td><button class="admin-link" type="button" data-goto="moderate">Open</button></td></tr></tbody></table></div></section>
+<section data-view="moderate" hidden><div class="card"><p class="eyebrow">Moderation detail</p><h2>Night ferry</h2><p class="poem-body">Lanterns on the river keep their own small weather.</p><div class="demo-nav"><button class="primary-button" type="button">Approve - preview</button><button class="secondary-button" type="button">Reject - preview</button></div></div></section>
+<section data-view="stats" hidden><div class="card"><h2>Reader votes</h2><table class="submission-table"><thead><tr><th>Title</th><th>Likes</th><th>Dislikes</th></tr></thead><tbody><tr><td>Evening bread</td><td>12</td><td>2</td></tr><tr><td>Stone soup</td><td>3</td><td>1</td></tr></tbody></table></div></section>
+<section data-view="barista" hidden><div class="card"><p class="eyebrow">Card desk</p><h2>Small hours</h2><p class="barista-text">Bloom where you are planted.</p><div class="demo-nav"><button class="primary-button" type="button">Generate todays text</button><button class="secondary-button" type="button">Print</button></div></div></section>
+<section data-view="qr" hidden><div class="card"><p class="eyebrow">Customer access</p><h2>Scan to read</h2><p class="tiny">http://192.168.1.25:3000/customer</p></div></section>
+</main>
+</div>
+<div class="mockup-note">Static preview for clients. Use the menu below to switch views. No votes, submissions, approvals, prints, or QR codes are created.</div>
+<nav class="mockup-bar"><div class="mockup-inner"><div class="mockup-menu"><button type="button" data-view="home" class="active">Home</button><button type="button" data-view="customer">Customer</button><button type="button" data-view="submit">Submit</button><button type="button" data-view="curator">Curator</button><button type="button" data-view="moderate">Moderate</button><button type="button" data-view="stats">Stats</button><button type="button" data-view="barista">Barista</button><button type="button" data-view="qr">QR</button></div></div></nav>
+<script>
+(function(){
+var cards=["Evening bread|Lanterns on the river.","Stone soup|She brought one stone.","Small hours|Bloom where you are."];
+var pos=0;
+function setCard(i){pos=(i+cards.length)%cards.length;var s=document.querySelector('[data-view="customer"]');if(!s)return;var p=cards[pos].split("|");var h=s.querySelector("h2");if(h)h.textContent=p[0];var b=s.querySelector(".poem-body");if(b)b.textContent=p[1];}
+function show(n){var m=document.querySelectorAll("#mockup-main [data-view]");for(var k=0;k<m.length;k++){m[k].hidden=m[k].getAttribute("data-view")!==n;}var b=document.querySelectorAll(".mockup-menu button");for(var j=0;j<b.length;j++){if(b[j].getAttribute("data-view")===n){b[j].classList.add("active");}else{b[j].classList.remove("active");}}window.scrollTo(0,0);}
+var g=document.querySelectorAll("[data-goto]");for(var a=0;a<g.length;a++){g[a].addEventListener("click",function(){show(this.getAttribute("data-goto"));});}
+var u=document.querySelectorAll(".mockup-menu button");for(var c=0;c<u.length;c++){u[c].addEventListener("click",function(){show(this.getAttribute("data-view"));});}
+var nx=document.querySelectorAll("[data-next-card]");for(var d=0;d<nx.length;d++){nx[d].addEventListener("click",function(){setCard(pos+1);});}
+setCard(0);show("home");
+})();
+</script>
+</body>
+</html>
+
+
+
