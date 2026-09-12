@@ -188,8 +188,8 @@ Included seed data:
 7. Open `/qr` to get a scannable code for the customer page
 
 ## Client mockup
-Static preview files live in mockup/.
-Open mockup/index.html directly, or host that folder as-is on GitHub Pages (Pages from a branch, select the mockup folder).
+Static preview files live in docs/.
+Open docs/index.html directly, or host that folder as-is on GitHub Pages (Pages from a branch, select the docs folder).
 No backend: the bottom menu only switches Home, Customer, Submit, Curator, Moderate, Stats, Barista, QR. Buttons only change local demo cards. No votes, submissions, approvals, prints, or QR codes are created.
 
 ## Notes
