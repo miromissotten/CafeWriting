@@ -78,6 +78,9 @@
             transition: transform 0.25s ease, opacity 0.25s ease;
             will-change: transform;
             -webkit-overflow-scrolling: touch;
+            user-select: none;
+            cursor: grab;
+            position: relative;
         }
 
         .swipe-card h2 {
@@ -98,6 +101,50 @@
         .swipe-card.swipe-right {
             transform: translateX(150%) rotate(12deg);
             opacity: 0;
+        }
+
+        .vote-overlay {
+            position: absolute;
+            top: 24px;
+            padding: 8px 18px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            font-family: 'Source Sans 3', 'Inter', sans-serif;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.1s ease;
+        }
+
+        .vote-overlay-like {
+            right: 24px;
+            color: var(--success);
+            border: 2px solid var(--success);
+            transform: rotate(12deg);
+        }
+
+        .vote-overlay-dislike {
+            left: 24px;
+            color: var(--danger);
+            border: 2px solid var(--danger);
+            transform: rotate(-12deg);
+        }
+
+        @keyframes cardEnter {
+            from {
+                transform: scale(0.85);
+                opacity: 0;
+            }
+            to {
+                transform: scale(1);
+                opacity: 1;
+            }
+        }
+
+        .swipe-card.card-enter {
+            animation: cardEnter 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
         }
 
         .reader-actions {
@@ -209,21 +256,74 @@
 <script>
     const texts = <%- JSON.stringify(texts) %>;
     let currentIndex = 0;
+    const sessionId = (typeof crypto !== 'undefined' && crypto.randomUUID)
+        ? crypto.randomUUID()
+        : `session-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    let isTransitioning = false;
 
     const landing = document.getElementById('landing');
     const reader = document.getElementById('reader');
     const endState = document.getElementById('end-state');
     const swipeCard = document.getElementById('swipe-card');
     const counter = document.getElementById('counter');
+    const overlayState = { like: null, dislike: null };
+
+    function updateVoteOverlay(deltaX) {
+        const likeOverlay = overlayState.like;
+        const dislikeOverlay = overlayState.dislike;
+        if (!likeOverlay || !dislikeOverlay) return;
+
+        const absDelta = Math.abs(deltaX);
+        const opacity = Math.min(absDelta / 140, 1);
+
+        if (deltaX > 0) {
+            likeOverlay.style.opacity = opacity;
+            dislikeOverlay.style.opacity = 0;
+        } else if (deltaX < 0) {
+            likeOverlay.style.opacity = 0;
+            dislikeOverlay.style.opacity = opacity;
+        } else {
+            likeOverlay.style.opacity = 0;
+            dislikeOverlay.style.opacity = 0;
+        }
+    }
+
+    function resetVoteOverlay() {
+        const likeOverlay = overlayState.like;
+        const dislikeOverlay = overlayState.dislike;
+        if (likeOverlay) likeOverlay.style.opacity = 0;
+        if (dislikeOverlay) dislikeOverlay.style.opacity = 0;
+    }
+
+    function escapeHtml(str) {
+        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    async function recordEvent(endpoint, payload) {
+        try {
+            await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch (err) {
+            console.error(`Failed to record ${endpoint}:`, err);
+        }
+    }
+
+    function recordVote(textId, vote) {
+        recordEvent('/api/votes', { textId, vote, sessionId });
+    }
 
     function renderCard() {
         if (currentIndex >= texts.length) {
             reader.style.display = 'none';
             endState.style.display = 'flex';
+            swipeCard.style.transition = '';
             return;
         }
         const text = texts[currentIndex];
-        const lines = text.content.split('\n').map(line => `<p>${line}</p>`).join('');
+        const lines = escapeHtml(text.content).split('\n').map(line => `<p>${line}</p>`).join('');
         swipeCard.innerHTML = `
             <h2>${text.title}</h2>
             <div class="poem-body">${lines}</div>
@@ -231,9 +331,21 @@
                 <span class="pill">${text.category}</span>
                 <span class="tiny">${text.author}</span>
             </div>
+            <div class="vote-overlay vote-overlay-like" id="vote-overlay-like">Like</div>
+            <div class="vote-overlay vote-overlay-dislike" id="vote-overlay-dislike">Dislike</div>
         `;
-        swipeCard.classList.remove('swipe-left', 'swipe-right');
+        const newLikeOverlay = document.getElementById('vote-overlay-like');
+        const newDislikeOverlay = document.getElementById('vote-overlay-dislike');
+        overlayState.like = newLikeOverlay;
+        overlayState.dislike = newDislikeOverlay;
+        swipeCard.classList.remove('swipe-left', 'swipe-right', 'card-enter');
+        swipeCard.style.transition = 'none';
+        swipeCard.style.transform = '';
+        swipeCard.style.opacity = '';
+        void swipeCard.offsetWidth;
+        swipeCard.classList.add('card-enter');
         counter.textContent = `${currentIndex + 1} / ${texts.length}`;
+        recordEvent('/api/displays', { textId: text.id, sessionId });
     }
 
     function nextCard() {
@@ -241,8 +353,25 @@
         renderCard();
     }
 
+    function swipeCardTo(direction) {
+        if (isTransitioning) return;
+        isTransitioning = true;
+        swipeCard.classList.add(direction);
+        swipeCard.style.transform = '';
+        swipeCard.style.opacity = '0';
+        if (currentIndex < texts.length) {
+            const vote = direction === 'swipe-right' ? 'like' : 'dislike';
+            recordVote(texts[currentIndex].id, vote);
+        }
+        setTimeout(() => {
+            nextCard();
+            isTransitioning = false;
+        }, 250);
+    }
+
     document.getElementById('start-reading').addEventListener('click', () => {
         if (texts.length === 0) return;
+        recordEvent('/api/sessions', { sessionId });
         landing.style.display = 'none';
         reader.style.display = 'flex';
         renderCard();
@@ -256,39 +385,97 @@
     });
 
     document.getElementById('like-btn').addEventListener('click', () => {
-        swipeCard.classList.add('swipe-right');
-        setTimeout(nextCard, 250);
+        swipeCardTo('swipe-right');
     });
 
     document.getElementById('dislike-btn').addEventListener('click', () => {
-        swipeCard.classList.add('swipe-left');
-        setTimeout(nextCard, 250);
+        swipeCardTo('swipe-left');
     });
 
-    // Touch swipe support
-    let touchStartX = 0;
-    let touchStartY = 0;
-
-    swipeCard.addEventListener('touchstart', (e) => {
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-    });
-
-    swipeCard.addEventListener('touchend', (e) => {
-        const touchEndX = e.changedTouches[0].clientX;
-        const touchEndY = e.changedTouches[0].clientY;
-        const diffX = touchEndX - touchStartX;
-        const diffY = touchEndY - touchStartY;
-
-        if (Math.abs(diffX) > Math.abs(diffY) && Math.abs(diffX) > 60) {
-            if (diffX > 0) {
-                swipeCard.classList.add('swipe-right');
-            } else {
-                swipeCard.classList.add('swipe-left');
-            }
-            setTimeout(nextCard, 250);
+    swipeCard.addEventListener('animationend', (e) => {
+        if (e.animationName === 'cardEnter') {
+            swipeCard.classList.remove('card-enter');
+            swipeCard.style.transition = '';
         }
     });
+
+    let isDragging = false;
+    let startX = 0;
+    let startY = 0;
+    let currentDeltaX = 0;
+    let hasMoved = false;
+
+    function handleDragStart(e) {
+        isDragging = true;
+        hasMoved = false;
+        const point = e.touches ? e.touches[0] : e;
+        startX = point.clientX;
+        startY = point.clientY;
+        currentDeltaX = 0;
+        swipeCard.style.transition = 'none';
+    }
+
+    function handleDragMove(e) {
+        if (!isDragging) return;
+        const point = e.touches ? e.touches[0] : e;
+        const deltaX = point.clientX - startX;
+        const deltaY = point.clientY - startY;
+
+        if (!hasMoved) {
+            if (Math.abs(deltaY) > Math.abs(deltaX) && Math.abs(deltaY) > 10) {
+                isDragging = false;
+                swipeCard.style.transition = '';
+                swipeCard.style.transform = '';
+                resetVoteOverlay();
+                return;
+            }
+            if (Math.abs(deltaX) > 5) {
+                hasMoved = true;
+            }
+        }
+
+        if (e.cancelable) e.preventDefault();
+        currentDeltaX = deltaX;
+        const rotation = deltaX * 0.04;
+        swipeCard.style.transform = `translateX(${deltaX}px) rotate(${rotation}deg)`;
+        updateVoteOverlay(deltaX);
+    }
+
+    function handleDragEnd() {
+        if (!isDragging) return;
+        if (isTransitioning) return;
+        isDragging = false;
+        swipeCard.style.transition = 'transform 0.25s ease, opacity 0.25s ease';
+
+        if (Math.abs(currentDeltaX) > 80) {
+            isTransitioning = true;
+            const direction = currentDeltaX > 0 ? 'swipe-right' : 'swipe-left';
+            swipeCard.classList.add(direction);
+            swipeCard.style.transform = '';
+            swipeCard.style.opacity = '0';
+            if (currentIndex < texts.length) {
+                const vote = direction === 'swipe-right' ? 'like' : 'dislike';
+                recordVote(texts[currentIndex].id, vote);
+            }
+            setTimeout(() => {
+                nextCard();
+                isTransitioning = false;
+            }, 250);
+        } else {
+            swipeCard.style.transform = '';
+            swipeCard.style.opacity = '';
+            resetVoteOverlay();
+        }
+        currentDeltaX = 0;
+    }
+
+    swipeCard.addEventListener('mousedown', handleDragStart);
+    document.addEventListener('mousemove', handleDragMove);
+    document.addEventListener('mouseup', handleDragEnd);
+
+    swipeCard.addEventListener('touchstart', handleDragStart, { passive: true });
+    swipeCard.addEventListener('touchmove', handleDragMove, { passive: false });
+    swipeCard.addEventListener('touchend', handleDragEnd);
 </script>
 </body>
 </html>

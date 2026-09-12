@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title><%= pageTitle %></title>
+    <%- include('partials/head') %>
+</head>
+<body class="page-shell">
+    <div class="container container--wide">
+        <header class="topbar">
+            <div class="topbar-left">
+                <p class="eyebrow">Editor's desk</p>
+                <h1>Stats dashboard</h1>
+            </div>
+            <div class="topbar-right">
+                <a class="admin-link" href="/">Home</a>
+                <a class="secondary-button" href="/curator">Curator</a>
+                <a class="secondary-button" href="/curator/submissions">All submissions</a>
+            </div>
+        </header>
+
+        <div class="stats-row">
+            <div class="stat-item">
+                <span class="stat-label">Likes</span>
+                <span class="stat-value"><%= stats.totals.likes %></span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Dislikes</span>
+                <span class="stat-value"><%= stats.totals.dislikes %></span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Votes</span>
+                <span class="stat-value"><%= stats.totals.votes %></span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Sessions</span>
+                <span class="stat-value"><%= stats.totals.sessions %></span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Displays</span>
+                <span class="stat-value"><%= stats.totals.displays %></span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Votes / session</span>
+                <span class="stat-value"><%= stats.totals.votesPerSession %></span>
+            </div>
+        </div>
+
+        <div style="margin: 32px 0 16px;">
+            <div class="segmented" role="tablist" aria-label="Stats views">
+                <button type="button" class="segmented-button active" role="tab" aria-selected="true" data-panel="table" aria-controls="panel-table">Table</button>
+                <button type="button" class="segmented-button" role="tab" aria-selected="false" data-panel="activity" aria-controls="panel-activity">Activity</button>
+            </div>
+        </div>
+
+        <section id="panel-table" class="card">
+            <h2>Reader votes</h2>
+            <% if (!voteStats || voteStats.length === 0) { %>
+                <p class="empty-state">No votes yet. Share the reader link to start collecting feedback.</p>
+            <% } else { %>
+                <table class="submission-table" style="margin-top: 16px;">
+                    <thead>
+                        <tr>
+                            <th>Title</th>
+                            <th>Author</th>
+                            <th>Category</th>
+                            <th>Status</th>
+                            <th>Likes</th>
+                            <th>Dislikes</th>
+                            <th>Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% voteStats.forEach((item) => { %>
+                            <tr>
+                                <td><%= item.title %></td>
+                                <td><%= item.author %></td>
+                                <td><span class="pill"><%= item.category %></span></td>
+                                <td><span class="status-badge status-<%= item.status %>"><%= item.status %></span></td>
+                                <td><%= item.likes %></td>
+                                <td><%= item.dislikes %></td>
+                                <td><strong><%= item.score %></strong></td>
+                            </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            <% } %>
+        </section>
+
+        <section id="panel-activity" class="card" hidden>
+            <h2>Activity over the last <%= stats.days %> days</h2>
+            <div class="chart-series" role="group" aria-label="Chart series">
+                <button type="button" class="active" data-series="votes">Votes</button>
+                <button type="button" data-series="submissions">Submissions</button>
+                <button type="button" data-series="displays">Displays</button>
+                <button type="button" data-series="sessions">Sessions</button>
+            </div>
+            <div id="chart-legend" class="chart-legend"></div>
+            <div id="chart" class="chart-wrap"></div>
+        </section>
+    </div>
+<script>
+        window.__stats = <%- JSON.stringify(stats) %>;
+        const statsData = window.__stats;
+        const buckets = statsData.buckets;
+
+        const seriesDefinitions = {
+            votes: {
+                label: 'Votes',
+                keys: [
+                    { key: 'likes', label: 'Likes', color: '#4a6b53' },
+                    { key: 'dislikes', label: 'Dislikes', color: '#8b4a3f' }
+                ]
+            },
+            submissions: {
+                label: 'Submissions',
+                keys: [
+                    { key: 'submissions', label: 'Submitted', color: '#7a5c3e' },
+                    { key: 'approvals', label: 'Approved', color: '#4a6b53' },
+                    { key: 'rejections', label: 'Rejected', color: '#8b4a3f' }
+                ]
+            },
+            displays: {
+                label: 'Displays',
+                keys: [
+                    { key: 'displaysBarista', label: 'Barista', color: '#7a5c3e' },
+                    { key: 'displaysReader', label: 'Reader', color: '#d4b896' }
+                ]
+            },
+            sessions: {
+                label: 'Sessions',
+                keys: [
+                    { key: 'sessions', label: 'Sessions', color: '#2c241b' }
+                ]
+            }
+        };
+
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+
+        function renderLegend(def) {
+            const legend = document.getElementById('chart-legend');
+            legend.innerHTML = '';
+            def.keys.forEach((key) => {
+                const item = document.createElement('span');
+                item.className = 'chart-legend-item';
+                const swatch = document.createElement('span');
+                swatch.className = 'chart-legend-swatch';
+                swatch.style.background = key.color;
+                item.appendChild(swatch);
+                item.appendChild(document.createTextNode(key.label));
+                legend.appendChild(item);
+            });
+        }
+function renderChart(seriesKey) {
+            const def = seriesDefinitions[seriesKey];
+            const container = document.getElementById('chart');
+            container.innerHTML = '';
+            if (!def) return;
+
+            const W = 800;
+            const H = 260;
+            const padL = 36;
+            const padR = 8;
+            const padT = 12;
+            const padB = 26;
+            const plotW = W - padL - padR;
+            const plotH = H - padT - padB;
+
+            const maxValue = Math.max(1, ...buckets.map((bucket) =>
+                def.keys.reduce((sum, key) => sum + (bucket[key.key] || 0), 0)
+            ));
+
+            const gridSteps = 4;
+            const groupWidth = plotW / buckets.length;
+            const barGap = 2;
+            const barWidth = Math.max(1, (groupWidth - barGap * 2) / def.keys.length);
+
+            const svg = document.createElementNS(SVG_NS, 'svg');
+            svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+            svg.setAttribute('width', '100%');
+            svg.setAttribute('role', 'img');
+            svg.setAttribute('aria-label', `${def.label} per day`);
+
+            for (let i = 0; i <= gridSteps; i++) {
+                const y = padT + plotH - (plotH * i) / gridSteps;
+                const line = document.createElementNS(SVG_NS, 'line');
+                line.setAttribute('x1', String(padL));
+                line.setAttribute('y1', String(y));
+                line.setAttribute('x2', String(W - padR));
+                line.setAttribute('y2', String(y));
+                line.setAttribute('stroke', '#e3d8c8');
+                line.setAttribute('stroke-width', '1');
+                svg.appendChild(line);
+
+                const valueLabel = document.createElementNS(SVG_NS, 'text');
+                valueLabel.setAttribute('x', String(padL - 6));
+                valueLabel.setAttribute('y', String(y + 4));
+                valueLabel.setAttribute('text-anchor', 'end');
+                valueLabel.setAttribute('font-size', '10');
+                valueLabel.setAttribute('fill', '#8a7f70');
+                valueLabel.textContent = String(Math.round((maxValue * i) / gridSteps));
+                svg.appendChild(valueLabel);
+            }
+
+            buckets.forEach((bucket, dayIndex) => {
+                const groupX = padL + dayIndex * groupWidth;
+                def.keys.forEach((key, seriesIndex) => {
+                    const value = bucket[key.key] || 0;
+                    const barH = value > 0 ? (value / maxValue) * plotH : 0;
+                    const rect = document.createElementNS(SVG_NS, 'rect');
+                    rect.setAttribute('x', String(groupX + barGap + seriesIndex * barWidth));
+                    rect.setAttribute('y', String(padT + plotH - barH));
+                    rect.setAttribute('width', String(barWidth));
+                    rect.setAttribute('height', String(barH));
+                    rect.setAttribute('fill', key.color);
+                    if (value > 0) {
+                        const title = document.createElementNS(SVG_NS, 'title');
+                        title.textContent = `${bucket.date} · ${key.label}: ${value}`;
+                        rect.appendChild(title);
+                    }
+                    svg.appendChild(rect);
+                });
+
+                if (dayIndex % 5 === 0 || dayIndex === buckets.length - 1) {
+                    const xLabel = document.createElementNS(SVG_NS, 'text');
+                    xLabel.setAttribute('x', String(groupX + groupWidth / 2));
+                    xLabel.setAttribute('y', String(H - 8));
+                    xLabel.setAttribute('text-anchor', 'middle');
+                    xLabel.setAttribute('font-size', '10');
+                    xLabel.setAttribute('fill', '#8a7f70');
+                    const date = new Date(bucket.date + 'T00:00:00Z');
+                    xLabel.textContent = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+                    svg.appendChild(xLabel);
+                }
+            });
+
+            container.appendChild(svg);
+            renderLegend(def);
+        }
+document.querySelectorAll('.chart-series button').forEach((button) => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.chart-series button').forEach((b) => b.classList.remove('active'));
+                button.classList.add('active');
+                renderChart(button.dataset.series);
+            });
+        });
+
+        document.querySelectorAll('.segmented-button').forEach((button) => {
+            button.addEventListener('click', () => {
+                document.querySelectorAll('.segmented-button').forEach((b) => {
+                    const active = b === button;
+                    b.classList.toggle('active', active);
+                    b.setAttribute('aria-selected', String(active));
+                });
+                document.getElementById('panel-table').hidden = button.dataset.panel !== 'table';
+                document.getElementById('panel-activity').hidden = button.dataset.panel !== 'activity';
+            });
+        });
+
+        renderChart('votes');
+    </script>
+</body>
+</html>

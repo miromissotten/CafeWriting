@@ -1,0 +1,5 @@
+node_modules/
+tmp-*.db
+data/cafe_writing.db*
+data/cafe_writing.db-shm
+data/cafe_writing.db-wal

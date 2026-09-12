@@ -180,17 +180,9 @@ button.secondary-button {
     background: rgba(122, 92, 62, 0.04);
 }
 
-.text-list {
-    display: flex;
-    flex-direction: column;
-    gap: 28px;
-}
-
-.text-card {
-    padding: 32px;
-    background: var(--paper-deep);
-    border: 1px solid var(--line-soft);
-    border-radius: 6px;
+.secondary-button[aria-expanded="true"] {
+    border-color: var(--accent-soft);
+    background: rgba(122, 92, 62, 0.08);
 }
 
 .meta-row {
@@ -539,4 +531,84 @@ code {
         border: none;
         background: white;
     }
+}
+
+.segmented {
+    display: inline-flex;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid var(--line-soft);
+    border-radius: 6px;
+    background: var(--paper-deep);
+}
+
+.segmented-button {
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--muted);
+    font-family: 'Source Sans 3', 'Inter', sans-serif;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.segmented-button.active {
+    background: var(--paper);
+    color: var(--ink);
+    border-color: var(--line-soft);
+}
+
+.chart-series {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+}
+
+.chart-series button {
+    font-size: 0.8rem;
+    color: var(--muted);
+    padding: 0.35rem 0.8rem;
+    border: 1px solid var(--line-soft);
+    border-radius: 4px;
+    background: transparent;
+    font-family: inherit;
+    cursor: pointer;
+    transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.chart-series button.active {
+    color: var(--ink);
+    border-color: var(--accent-soft);
+    background: rgba(122, 92, 62, 0.08);
+}
+
+.chart-legend {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    font-size: 0.82rem;
+    color: var(--ink-soft);
+}
+
+.chart-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.chart-legend-swatch {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+}
+
+.chart-wrap svg {
+    display: block;
+    width: 100%;
+    height: auto;
 }

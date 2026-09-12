@@ -32,6 +32,34 @@ function createApp(options = {}) {
     );
   `);
 
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS text_votes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      text_id INTEGER NOT NULL REFERENCES texts(id) ON DELETE CASCADE,
+      vote TEXT NOT NULL CHECK (vote IN ('like','dislike')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+  `);
+
+    db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_text_votes_text_id ON text_votes(text_id);
+  `);
+
+    db.exec(`
+    CREATE TABLE IF NOT EXISTS event_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_type TEXT NOT NULL,
+      text_id INTEGER REFERENCES texts(id) ON DELETE SET NULL,
+      session_id TEXT,
+      created_at TEXT NOT NULL
+    );
+  `);
+
+    db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_event_log_created_at ON event_log(created_at);
+    CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(event_type);
+  `);
+
     const seedCount = db.prepare('SELECT COUNT(*) AS total FROM texts').get().total;
     if (seedCount === 0) {
         const demoTexts = [
@@ -202,6 +230,50 @@ function createApp(options = {}) {
         insertMany(demoTexts);
     }
 
+    function toIsoTimestamp(value) {
+        if (!value) return null;
+        return value.includes('T')
+            ? value.replace(/Z$/, '') + 'Z'
+            : value.replace(' ', 'T') + 'Z';
+    }
+
+    function logEvent(eventType, { textId = null, sessionId = null } = {}) {
+        db.prepare(
+            'INSERT INTO event_log (event_type, text_id, session_id, created_at) VALUES (?, ?, ?, ?)'
+        ).run(eventType, textId ?? null, sessionId ?? null, new Date().toISOString());
+    }
+
+    function backfillEventLog() {
+        const count = db.prepare('SELECT COUNT(*) AS total FROM event_log').get().total;
+        if (count > 0) return;
+
+        const insert = db.prepare(
+            'INSERT INTO event_log (event_type, text_id, session_id, created_at) VALUES (?, ?, ?, ?)'
+        );
+
+        const backfill = db.transaction(() => {
+            const votes = db.prepare('SELECT text_id, vote, created_at FROM text_votes').all();
+            for (const vote of votes) {
+                insert.run(`vote_${vote.vote}`, vote.text_id, null, toIsoTimestamp(vote.created_at));
+            }
+
+            const texts = db.prepare('SELECT id, created_at, approved_at, updated_at, status FROM texts').all();
+            for (const text of texts) {
+                insert.run('submission_created', text.id, null, toIsoTimestamp(text.created_at));
+                if (text.approved_at) {
+                    insert.run('submission_approved', text.id, null, toIsoTimestamp(text.approved_at));
+                }
+                if (text.status === 'rejected') {
+                    insert.run('submission_rejected', text.id, null, toIsoTimestamp(text.updated_at));
+                }
+            }
+        });
+
+        backfill();
+    }
+
+    backfillEventLog();
+
     const app = express();
 
     app.set('view engine', 'ejs');
@@ -251,8 +323,126 @@ function createApp(options = {}) {
       SET last_displayed_at = ?, display_count = display_count + 1, updated_at = ?
       WHERE id = ?
     `).run(now, now, next.id);
+        logEvent('display_barista', { textId: next.id });
 
         return getTextById(next.id);
+    }
+
+    function getVoteStats(textId) {
+        const row = db.prepare(`
+      SELECT
+        SUM(CASE WHEN vote = 'like' THEN 1 ELSE 0 END) AS likes,
+        SUM(CASE WHEN vote = 'dislike' THEN 1 ELSE 0 END) AS dislikes
+      FROM text_votes
+      WHERE text_id = ?
+    `).get(textId);
+        return {
+            likes: row.likes || 0,
+            dislikes: row.dislikes || 0,
+            score: (row.likes || 0) - (row.dislikes || 0)
+        };
+    }
+
+    function getAllVoteStats() {
+        const rows = db.prepare(`
+      SELECT
+        t.id,
+        t.title,
+        t.author,
+        t.category,
+        t.status,
+        SUM(CASE WHEN v.vote = 'like' THEN 1 ELSE 0 END) AS likes,
+        SUM(CASE WHEN v.vote = 'dislike' THEN 1 ELSE 0 END) AS dislikes
+      FROM texts t
+      LEFT JOIN text_votes v ON v.text_id = t.id
+      GROUP BY t.id
+      ORDER BY t.created_at DESC
+    `).all();
+        return rows.map((row) => ({
+            id: row.id,
+            title: row.title,
+            author: row.author,
+            category: row.category,
+            status: row.status,
+            likes: row.likes || 0,
+            dislikes: row.dislikes || 0,
+            score: (row.likes || 0) - (row.dislikes || 0)
+        }));
+    }
+
+    function getActivityStats({ days = 30 } = {}) {
+        const start = new Date();
+        start.setUTCHours(0, 0, 0, 0);
+        start.setUTCDate(start.getUTCDate() - (days - 1));
+        const startKey = start.toISOString();
+
+        const bucketKeys = {
+            vote_like: 'likes',
+            vote_dislike: 'dislikes',
+            submission_created: 'submissions',
+            submission_approved: 'approvals',
+            submission_rejected: 'rejections',
+            display_barista: 'displaysBarista',
+            display_reader: 'displaysReader',
+            session_started: 'sessions'
+        };
+
+        const buckets = [];
+        const indexByDate = new Map();
+        for (let i = 0; i < days; i++) {
+            const day = new Date(start);
+            day.setUTCDate(start.getUTCDate() + i);
+            const bucket = {
+                date: day.toISOString().slice(0, 10),
+                likes: 0,
+                dislikes: 0,
+                submissions: 0,
+                approvals: 0,
+                rejections: 0,
+                displaysBarista: 0,
+                displaysReader: 0,
+                sessions: 0
+            };
+            buckets.push(bucket);
+            indexByDate.set(bucket.date, bucket);
+        }
+
+        const totals = {
+            likes: 0,
+            dislikes: 0,
+            submissions: 0,
+            approvals: 0,
+            rejections: 0,
+            displaysBarista: 0,
+            displaysReader: 0,
+            sessions: 0
+        };
+
+        const events = db.prepare(
+            'SELECT event_type, created_at FROM event_log WHERE created_at >= ? ORDER BY created_at ASC'
+        ).all(startKey);
+
+        for (const event of events) {
+            const key = bucketKeys[event.event_type];
+            const bucket = indexByDate.get(event.created_at.slice(0, 10));
+            if (!key || !bucket) continue;
+            bucket[key]++;
+            totals[key]++;
+        }
+
+        const totalVotes = totals.likes + totals.dislikes;
+        const totalDisplays = totals.displaysBarista + totals.displaysReader;
+
+        return {
+            days,
+            totals: {
+                ...totals,
+                votes: totalVotes,
+                displays: totalDisplays,
+                votesPerSession: totals.sessions > 0 ? Math.round((totalVotes / totals.sessions) * 10) / 10 : 0
+            },
+            buckets
+        };
     }
 
     app.get('/', (req, res) => {
@@ -281,6 +471,7 @@ function createApp(options = {}) {
 
     app.get('/curator', (req, res) => {
         const submissions = fetchSubmissions();
+        const voteStats = getAllVoteStats();
         const stats = {
             total: submissions.length,
             pending: submissions.filter((item) => item.status === 'pending').length,
@@ -289,7 +480,13 @@ function createApp(options = {}) {
         };
 
         const recent = submissions.filter((item) => item.status === 'pending').slice(0, 6);
-        res.render('curator', { submissions: recent, stats, pageTitle: 'Curator dashboard' });
+        res.render('curator', { submissions: recent, stats, voteStats, pageTitle: 'Curator dashboard' });
+    });
+
+    app.get('/curator/stats', (req, res) => {
+        const voteStats = getAllVoteStats();
+        const stats = getActivityStats({ days: 30 });
+        res.render('curator-stats', { voteStats, stats, pageTitle: 'Stats dashboard' });
     });
 
     app.get('/curator/submissions', (req, res) => {
@@ -341,6 +538,7 @@ function createApp(options = {}) {
     `).run(title.trim(), author.trim(), category, content.trim(), source ? source.trim() : null, notes ? notes.trim() : null);
 
         const row = getTextById(created.lastInsertRowid);
+        logEvent('submission_created', { textId: created.lastInsertRowid });
         res.status(201).json(row);
     });
 
@@ -360,6 +558,7 @@ function createApp(options = {}) {
       SET title = ?, author = ?, category = ?, content = ?, source = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(title.trim(), author.trim(), category, content.trim(), source ? source.trim() : null, notes ? notes.trim() : null, req.params.id);
+        logEvent('text_updated', { textId: req.params.id });
 
         const updated = getTextById(req.params.id);
         res.json(updated);
@@ -376,6 +575,7 @@ function createApp(options = {}) {
       SET status = 'approved', rejection_reason = NULL, approved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(req.params.id);
+        logEvent('submission_approved', { textId: req.params.id });
 
         const updated = getTextById(req.params.id);
         res.json(updated);
@@ -393,6 +593,7 @@ function createApp(options = {}) {
       SET status = 'rejected', rejection_reason = ?, approved_at = NULL, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(reason, req.params.id);
+        logEvent('submission_rejected', { textId: req.params.id });
 
         const updated = getTextById(req.params.id);
         res.json(updated);
@@ -405,6 +606,7 @@ function createApp(options = {}) {
         }
 
         db.prepare('DELETE FROM texts WHERE id = ?').run(req.params.id);
+        logEvent('submission_deleted', { textId: req.params.id });
         res.json({ success: true, deletedId: Number(req.params.id) });
     });
 
@@ -427,6 +629,60 @@ function createApp(options = {}) {
         res.json({ url: targetUrl, qrCode: qrDataUrl });
     });
 
+    app.get('/api/votes', (req, res) => {
+        const stats = getAllVoteStats();
+        res.json(stats);
+    });
+
+    app.get('/api/votes/:textId', (req, res) => {
+        const stats = getVoteStats(req.params.textId);
+        res.json(stats);
+    });
+
+    app.post('/api/votes', (req, res) => {
+        const { textId, vote, sessionId } = req.body || {};
+
+        if (!textId || !vote || !['like', 'dislike'].includes(vote)) {
+            return res.status(400).json({ error: 'textId and vote (like/dislike) are required.' });
+        }
+
+        const text = getTextById(textId);
+        if (!text) {
+            return res.status(404).json({ error: 'Text not found.' });
+        }
+
+        db.prepare('INSERT INTO text_votes (text_id, vote) VALUES (?, ?)').run(textId, vote);
+        logEvent(`vote_${vote}`, { textId, sessionId });
+        const stats = getVoteStats(textId);
+        res.status(201).json({ textId, vote, stats });
+    });
+
+    app.post('/api/sessions', (req, res) => {
+        const { sessionId } = req.body || {};
+        if (!sessionId) {
+            return res.status(400).json({ error: 'sessionId is required.' });
+        }
+
+        logEvent('session_started', { sessionId });
+        res.status(201).json({ sessionId });
+    });
+
+    app.post('/api/displays', (req, res) => {
+        const { textId, sessionId } = req.body || {};
+        if (!textId) {
+            return res.status(400).json({ error: 'textId is required.' });
+        }
+
+        const text = getTextById(textId);
+        if (!text) {
+            return res.status(404).json({ error: 'Text not found.' });
+        }
+
+        logEvent('display_reader', { textId, sessionId });
+        res.status(201).json({ textId, sessionId });
+    });
+
+    app.close = () => db.close();
     return app;
 }
 
